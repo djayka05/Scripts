@@ -1,0 +1,109 @@
+This file describes how to create a CSR request file on Linux for a TLS 
+certificate and submit it to a Windows Server Certification Authority (CA).  
+
+The CSR will include a Subject Alternate Name to maximize compatibility 
+with applications and services which require one.  
+
+The following assumes you have OpenSSL and Debian, but the commands would
+be nearly identical on a non-Debian flavor of Linux too.
+
+If don't wish to modify the openssl.cnf file, there are other options: 
+
+    https://4sysops.com/archives/create-a-certificate-request-file-with-alias-support-using-a-powershell-script/
+
+    https://www.pkisolutions.com/tools/pspki/submit-certificaterequest/
+
+
+
+
+-------------------------------------------------------------------------------
+
+Make a backup of your openssl.cnf file:
+
+    cp /etc/ssl/openssl.cnf /etc/ssl/openssl.cnf.bak
+
+Edit your /etc/ssl/openssl.cnf file:
+
+    vim /etc/ssl/openssl.cnf  (or nano or whatever) 
+
+Find or create the [ req ] section, then add or uncomment the following line:
+
+    req_extensions = v3_req
+
+Find or create the [ v3_req ] section, then add or uncomment the following line:
+
+    subjectAltName = @alt_names
+
+Find or create the [ alt_names ] section, then add or uncomment the following line:
+
+    DNS.1 = <fqdn>
+
+Where <fqdn> is the FQDN you want in the TLS certificate.
+
+Go to a suitable working directory, e.g., cd ~/Documents, and run:
+
+    openssl req -new -newkey rsa:2048 -keyout <fqdn>.key -out <fqdn>.csr -nodes
+
+Copy the <fqdn>.csr file to the Windows CA somehow.
+
+On the Windows CA, create a certificate template that includes the Server Authentication 
+application policy, e.g., make a duplicate of the Computer template.  Name that template
+"LinuxCert" or whatever.  On the Subject Name tab in the LinuxCert template, make sure to
+choose "Supply in the request" option.  Don't forget to "Issue" or load this template on
+the CA.
+
+On the Windows CA, use your template name to run:
+
+    certreq.exe -submit -config - -attrib "CertificateTemplate:LinuxCert" <fqdn>.csr <fqdn>.cer
+
+The above syntax is strange.  Notice that "-config -" has a floating "-" as an argument
+to -config.  This means the default CA should be used.  If a particular CA is desired instead,
+use "-config <servername>\<CAname>", like "controller\testing-ca" where the name of the CA
+is Controller and the name of the CA service is Testing-CA.  The <fqdn>.csr is the CSR input
+file and <fqdn>.cer is the output CER file.  This output CER will be the signed certificate
+in X.509 format.  If your template name is not "LinuxCert", then adjust the -attrib argument.
+
+Copy the <fqdn>.cer file back to the Linux machine somehow.
+
+On Linux, convert the X.509 CER file to PEM format, which is more Linux-friendly:
+
+    openssl x509 -in <fqdn>.cer -outform PEM -out <fqdn>.pem
+
+Finally, copy your KEY and PEM files to their correct working locations for whatever
+service needs them, e.g., NGINX, Apache, LiteSpeed, etc.
+
+
+
+
+-------------------------------------------------------------------------------
+
+For example, with NGINX you might copy the PEM and KEY files here:
+
+    /etc/nginx/certs/<fqdn>.pem
+    /etc/nginx/keys/<fqdn>.key
+
+And then edit your /etc/nginx/sites-enabled/<fqdn>.conf file to have something like:
+
+    server {
+        listen 80 default_server;
+
+        listen 443 ssl;
+        ssl_certificate certs/<fqdn>.pem;
+        ssl_certificate_key keys/<fqdn>.key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+
+        root /var/www/html;
+        index index.html;
+
+        server_name <fqdn>;
+
+        location / {
+            autoindex on;
+            try_files $uri $uri/ =404;
+        }
+    }
+
+
+
+
