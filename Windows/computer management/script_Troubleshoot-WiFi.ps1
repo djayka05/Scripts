@@ -1,7 +1,7 @@
 # Function to ping Google and return ping status
 function Test-PingGoogle {
     $pingResult = Test-Connection -ComputerName "www.google.com" -Count 1
-    $pingStatus = if ($pingResult.StatusCode -eq 0) { "Ping successful" } else { "Ping failed" }
+    $pingStatus = if ($pingResult.StatusCode -eq 0) { "Ping failed" } else { "Ping successful" }
     return $pingStatus
 }
 
