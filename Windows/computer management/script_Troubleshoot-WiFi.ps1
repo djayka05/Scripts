@@ -1,14 +1,9 @@
-# Function to ping Google and append results to the Wi-Fi troubleshooting text file
+# Function to ping Google and return ping status
 function Test-PingGoogle {
     $pingResult = Test-Connection -ComputerName "www.google.com" -Count 1
     $pingStatus = if ($pingResult.StatusCode -eq 0) { "Ping successful" } else { "Ping failed" }
-    $txtFilePath = "C:\temp\Wi-Fi_Troubleshooting_$env:COMPUTERNAME" + "_" + (Get-Date -Format 'yyyyMMdd_HHmmss') + ".txt"
-    @"
-$pingStatus
-
-"@ | Out-File -FilePath $txtFilePath -Append -Encoding utf8
+    return $pingStatus
 }
-
 
 # Function to perform DNS resolution test
 function Test-DnsResolution {
@@ -24,11 +19,17 @@ function Test-DnsResolution {
     if (-not $dnsTest) {
         $dnsTest = "DNS resolution test failed. Check DNS server configuration."
     }
-    $dnsTest
+    return $dnsTest
 }
 
-# Function to generate wireless network report
+# Function to generate wireless network report and append troubleshooting details
 function New-WifiReport {
+    
+    $duration = Read-Host -Prompt "Enter Duration"
+
+    # Generate a new WLAN report
+    netsh wlan show wlanreport duration="$duration"
+
     $reportPath = "C:\ProgramData\Microsoft\Windows\WlanReport\wlan-report-latest.html"
     if (-not (Test-Path $reportPath)) {
         Write-Host "WLAN report not found at the default location: $reportPath"
@@ -36,21 +37,36 @@ function New-WifiReport {
     }
     $destination = "C:\temp\WirelessNetworkReport_$(Get-Date -Format 'yyyyMMdd_HHmmss').html"
     Copy-Item -Path $reportPath -Destination $destination
-    Rename-Item -Path $destination -NewName ("Wi-Fi_Troubleshooting_$env:COMPUTERNAME" + "_" + (Get-Date -Format 'yyyyMMdd_HHmmss') + ".html")
-    $destination
+    $newReportPath = "C:\temp\Wi-Fi_Troubleshooting_$env:COMPUTERNAME" + "_" + (Get-Date -Format 'yyyyMMdd_HHmmss') + ".html"
+    Rename-Item -Path $destination -NewName $newReportPath
+
+    # Append ping status and DNS resolution test result to the HTML report
+    $pingStatus = $args[0]
+    $dnsTest = $args[1]
+    $htmlContent = Get-Content -Path $newReportPath -Raw
+    $updatedHtmlContent = $htmlContent -replace "</body>", @"
+    <div style='text-align: center;'>
+        <h2 style='margin-top: 20px;'>Additional Details</h2>
+        <pre style='text-align: left; display: inline-block;'>$pingStatus`n$dnsTest</pre>
+    </div>
+</body>
+"@
+    $updatedHtmlContent | Out-File -FilePath $newReportPath -Encoding utf8
+
+    return $newReportPath
 }
 
 # Main script
-$choice = Read-Host "Do you want to troubleshoot the local computer (L) or a remote computer (R)? [L/R]"
+$choice = Read-Host "Do you want to troubleshoot the local computer (1) or a remote computer (2)?"
 
-if ($choice -eq "L") {
+if ($choice -eq "1") {
     $ComputerName = $env:COMPUTERNAME
 }
-elseif ($choice -eq "R") {
+elseif ($choice -eq "2") {
     $ComputerName = Read-Host "Enter the name of the remote computer:"
 }
 else {
-    Write-Host "Invalid choice. Please select 'L' for local or 'R' for remote."
+    Write-Host "Invalid choice. Please select '1' for local or '2' for remote."
     exit
 }
 
@@ -65,7 +81,7 @@ if (-not (Test-Path $tempDir)) {
     }
 }
 
-if ($choice -eq "R") {
+if ($choice -eq "2") {
     # Ping the remote computer to check if it's online
     $pingResult = Test-Connection -ComputerName $ComputerName -Count 1 -Quiet
     if (-not $pingResult) {
@@ -82,11 +98,10 @@ if ($choice -eq "R") {
         $session = New-PSSession -ComputerName $ComputerName -Credential (New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $username, $password)
         Invoke-Command -Session $session -ScriptBlock {
             param ()
-            # Recommended troubleshooting steps (you can modify these as needed)
-            # Example: netsh wlan show interfaces, ipconfig /all, etc.
-            # Perform Wi-Fi troubleshooting steps here
             Write-Output "Wi-Fi troubleshooting steps completed."
-            Test-PingGoogle
+            $pingStatus = Test-PingGoogle
+            $dnsTest = Test-DnsResolution
+            $pingStatus, $dnsTest
         }
     } catch {
         Write-Host "Failed to establish a remote session to $ComputerName $($_.Exception.Message)"
@@ -95,36 +110,25 @@ if ($choice -eq "R") {
 
     # Generate wireless network report remotely
     try {
-        $reportPath = Invoke-Command -Session $session -ScriptBlock { New-WifiReport }
+        $reportPath = Invoke-Command -Session $session -ScriptBlock { param($pingStatus, $dnsTest) New-WifiReport $pingStatus $dnsTest } -ArgumentList $pingStatus, $dnsTest
         Write-Host "Wireless network report generated successfully on $ComputerName. It is saved at: $reportPath"
     } catch {
         Write-Host "Failed to generate the wireless network report on $ComputerName $($_.Exception.Message)"
     }
 } else {
     # Local troubleshooting steps
-    # Recommended troubleshooting steps (you can modify these as needed)
-    # Example: netsh wlan show interfaces, ipconfig /all, etc.
-    # Perform Wi-Fi troubleshooting steps here
+
     Write-Output "Wi-Fi troubleshooting steps completed."
 
     # Perform DNS resolution test
     $dnsResult = Test-DnsResolution
 
-    # Write troubleshooting details to a text file
-    $txtFilePath = "C:\temp\Wi-Fi_Troubleshooting_$env:COMPUTERNAME" + "_" + (Get-Date -Format 'yyyyMMdd_HHmmss') + ".txt"
-    @"
-Wi-Fi Troubleshooting Details for $env:COMPUTERNAME
-----------------------------------------------------
-$dnsResult
+    # Ping Google and get status
+    $pingStatus = Test-PingGoogle
 
-"@ | Out-File -FilePath $txtFilePath -Encoding utf8
-
-    # Ping Google and append results to the text file
-    Test-PingGoogle
-
-    # Generate local wireless network report
+    # Generate local wireless network report and append troubleshooting details
     try {
-        $reportPath = New-WifiReport
+        $reportPath = New-WifiReport $pingStatus $dnsResult
         Write-Host "Wireless network report generated successfully on $ComputerName. It is saved at: $reportPath"
     } catch {
         Write-Host "Failed to generate the wireless network report on $ComputerName $($_.Exception.Message)"
