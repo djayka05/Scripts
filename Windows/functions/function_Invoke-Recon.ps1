@@ -28,7 +28,7 @@ function Invoke-Recon {
     }
 
     # Query DMARC record
-    $DMARCRecord = Resolve-DnsName -Name "_dmarc.$Domain" -Type TXT | Where-Object {$_.Name -eq "_dmarc.$Domain"} | Select-Object -ExpandProperty "Strings"
+    $DMARCRecord = Resolve-DnsName -Name "_dmarc.$Domain" -Type TXT -ErrorAction SilentlyContinue | Where-Object {$_.Name -eq "_dmarc.$Domain"} | Select-Object -ExpandProperty "Strings"
     if ($DMARCRecord) {
         Write-Host " DMARC Records for $Domain " -ForegroundColor Black -BackgroundColor Cyan
         Write-Host ""
@@ -41,14 +41,14 @@ function Invoke-Recon {
     try {
         # Create a TCP client to connect to the server
         $tcpClient = New-Object System.Net.Sockets.TcpClient
-        $tcpClient.Connect($Domain, 443)  # Use $Domain instead of $domain
+        $tcpClient.Connect($Domain, 443)
         
         # Specify SSL protocol
         $sslProtocols = [System.Security.Authentication.SslProtocols]::Tls12
         
         # Create an SSL stream to secure the connection
         $sslStream = New-Object System.Net.Security.SslStream($tcpClient.GetStream(), $false)
-        $sslStream.AuthenticateAsClient($Domain, $null, $sslProtocols, $false)  # Use $Domain instead of $domain
+        $sslStream.AuthenticateAsClient($Domain, $null, $sslProtocols, $false)
         
         # Retrieve the SSL certificate from the server
         $cert = $sslStream.RemoteCertificate
@@ -76,7 +76,7 @@ function Invoke-Recon {
         $tcpClient.Close()
     } 
     catch {
-        Write-Error "Failed to retrieve certificate information for $Domain : $_"
+        $script:certError = "Failed to retrieve certificate information for $Domain"
     }
 }
 
@@ -90,7 +90,7 @@ function Resolve-FQDN {
         $resolvedIP = [System.Net.Dns]::GetHostAddresses($FQDN) | Select-Object -ExpandProperty IPAddressToString -First 1
         return $resolvedIP
     } catch {
-        Write-Error "Failed to resolve IP address for FQDN: $FQDN"
+        $script:resolveError = "Failed to resolve IP address for domain: $FQDN"
         return $null
     }
 }
@@ -102,10 +102,10 @@ function Get-ASN {
     )
 
     # Make API request
-    $response = Invoke-RestMethod -Uri "https://ipinfo.io/$IPAddress/json"
+    $response = Invoke-RestMethod -Uri "https://ipinfo.io/$IPAddress/json" -ErrorAction SilentlyContinue
 
     # Check if ASN information is available
-    if ($response.org) {
+    if ($response -and $response.org) {
         $asnInfo = @{
             ASN = $response.org
             City = $response.city
@@ -131,8 +131,6 @@ if ($ipAddress) {
     Write-Host ""
     Write-Host " ASN for domain $Domain (resolved to IP $ipAddress) " -ForegroundColor Black -BackgroundColor Cyan
     $asn | Format-Table
-} else {
-    Write-Host "Failed to resolve IP address for domain: $Domain"
 }
 
 function Get-WHOISInfo {
@@ -145,6 +143,7 @@ function Get-WHOISInfo {
         ".com" = "whois.verisign-grs.com"
         ".net" = "whois.verisign-grs.com"
         ".org" = "whois.pir.org"
+        ".me" = "whois.nic.me"
         # Add more mappings for other domain extensions as needed
     }
     
@@ -217,4 +216,19 @@ function Get-WHOISInfo {
     }
 }
 
-Get-WHOISInfo -domain $domain
+Get-WHOISInfo -domain $Domain
+
+# Display Errors section if there are any errors
+if ($script:resolveError -or $script:certError) {
+    Write-Host ""
+    Write-Host " Errors " -ForegroundColor Black -BackgroundColor Cyan
+    Write-Host ""
+
+    if ($script:resolveError) {
+        Write-Host $script:resolveError
+    }
+
+    if ($script:certError) {
+        Write-Host $script:certError
+    }
+}
