@@ -1,4 +1,4 @@
-function Get-DNSRecords {
+function Invoke-Recon {
     param(
         [string]$Domain
     )
@@ -122,7 +122,7 @@ function Get-ASN {
 
 # Main script
 $Domain = Read-Host -Prompt (Write-Host "Type/paste domain name" -ForegroundColor Yellow)
-Get-DNSRecords -Domain $Domain
+Invoke-Recon -Domain $Domain
 
 $ipAddress = Resolve-FQDN -FQDN $Domain
 
