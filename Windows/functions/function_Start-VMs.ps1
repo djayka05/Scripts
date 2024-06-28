@@ -92,7 +92,7 @@ function Start-VMsInFolder {
                 Start-Sleep -Seconds 15
             }
             2 {
-                Start-Sleep -Seconds 30
+                Start-Sleep -Seconds 90
             }
             Default {
                 # No delay for other folders
