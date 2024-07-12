@@ -90,3 +90,13 @@ $sandboxPath = "D:\Virtual Machines\VMS\Sandbox"
 
 # Call Stop-VMs function with folder paths as arguments
 Stop-VMs -lab01Path $lab01Path -sandboxPath $sandboxPath
+
+$confirmation = Read-Host "Do you want to shut down the PC? (y/n)"
+
+if ($confirmation -eq 'y') {
+    Stop-Computer
+} elseif ($confirmation -eq 'n') {
+    Write-Host "Shutdown canceled."
+} else {
+    Write-Host "Invalid input. Please enter 'y' or 'n'."
+}

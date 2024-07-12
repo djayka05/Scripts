@@ -55,7 +55,7 @@ function Invoke-Speedtest {
             Remove-Item -Path $file -Force -ErrorAction Stop
         } -ArgumentList $remoteExePath -Credential $cred
     } else {
-        Start-Process -FilePath $speedtestExe -ArgumentList $speedtestArgs -WindowStyle Hidden -Wait -RedirectStandardOutput $resultsFile -ErrorAction Stop
+        Start-Process -FilePath $speedtestExe -ArgumentList $speedtestArgs -NoNewWindow -Wait -RedirectStandardOutput $resultsFile -ErrorAction Stop
     }
 
     if ($Mode -eq "remote") {
@@ -70,6 +70,9 @@ function Invoke-Speedtest {
 
     # Remove Speedtest executable from local machine
     Remove-Item -Path $speedtestExe -Force -ErrorAction SilentlyContinue
+
+    # Open Notepad to display the results
+    Start-Process notepad.exe -ArgumentList $resultsFile
 }
 
 # Prompt the user to select an option
