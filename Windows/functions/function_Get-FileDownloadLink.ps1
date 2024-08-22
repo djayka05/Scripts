@@ -3,23 +3,31 @@ function Get-FileDownloadLink {
         [string]$FilePath
     )
 
+    # Define a custom object to store results
+    $result = [PSCustomObject]@{
+        FilePath       = $FilePath
+        FileExists     = $false
+        ZoneIdentifier = $null
+        DownloadLink   = $null
+        Message        = $null
+    }
+
     # Check if the file exists
     if (-not (Test-Path $FilePath)) {
-        Write-Host "File does not exist: $FilePath"
-        return
+        $result.Message = "File does not exist: $FilePath"
+        return $result
+    } else {
+        $result.FileExists = $true
     }
 
     # Attempt to read the Zone.Identifier stream
     try {
         $zoneIdentifier = Get-Content -Path $FilePath -Stream 'Zone.Identifier' -ErrorAction Stop
+        $result.ZoneIdentifier = $zoneIdentifier -join "`n"  # Join lines for easier storage in the object
     } catch {
-        Write-Host "No Zone.Identifier stream found for this file."
-        return
+        $result.Message = "No Zone.Identifier stream found for this file."
+        return $result
     }
-
-    # Output the entire Zone.Identifier stream for inspection
-    Write-Host "Zone.Identifier contents:"
-    $zoneIdentifier | ForEach-Object { Write-Host $_ }
 
     # Parse the Zone.Identifier stream to find any URL
     $downloadUrl = $zoneIdentifier | ForEach-Object {
@@ -29,17 +37,18 @@ function Get-FileDownloadLink {
     }
 
     if ($downloadUrl) {
-        return $downloadUrl
+        $result.DownloadLink = $downloadUrl
+        $result.Message = "Download link found."
     } else {
-        Write-Host "No valid download URL found in the Zone.Identifier stream."
+        $result.Message = "No valid download URL found in the Zone.Identifier stream."
     }
+
+    return $result
 }
 
 # Example usage:
 $filePath = Read-Host "Enter Filepath"
-$downloadLink = Get-FileDownloadLink -FilePath $filePath
+$downloadLinkInfo = Get-FileDownloadLink -FilePath $filePath
 
-# Output the download link
-if ($downloadLink) {
-    Write-Host "Download Link: $downloadLink"
-}
+# Output the custom object with details
+$downloadLinkInfo | Format-List
